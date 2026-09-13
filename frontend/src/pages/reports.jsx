@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import axios from "axios";
+import { API_URL } from "../config";
 
 import {
   BarChart,
@@ -15,25 +16,29 @@ import {
 function Reports() {
   const [invoices, setInvoices] = useState([]);
   const [customers, setCustomers] = useState([]);
+  const [products, setProducts] = useState([]);
 
   const [period, setPeriod] = useState("monthly");
   const [customerFilter, setCustomerFilter] = useState("all");
+  const [productFilter, setProductFilter] = useState("all");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [activePreset, setActivePreset] = useState("all-time");
 
   const [reportData, setReportData] = useState([]);
+  const [productReportData, setProductReportData] = useState([]);
 
   const token = localStorage.getItem("token");
 
   useEffect(() => {
     fetchInvoices();
     fetchCustomers();
+    fetchProducts();
   }, []);
 
   const fetchInvoices = async () => {
     try {
-      const response = await axios.get("http://localhost:5000/api/invoices", {
+      const response = await axios.get(`${API_URL}/api/invoices`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       setInvoices(response.data);
@@ -44,12 +49,23 @@ function Reports() {
 
   const fetchCustomers = async () => {
     try {
-      const response = await axios.get("http://localhost:5000/api/customers", {
+      const response = await axios.get(`${API_URL}/api/customers`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       setCustomers(response.data);
     } catch (error) {
       console.log("Customers fetch error:", error);
+    }
+  };
+
+  const fetchProducts = async () => {
+    try {
+      const response = await axios.get(`${API_URL}/api/products`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      setProducts(response.data);
+    } catch (error) {
+      console.log("Products fetch error:", error);
     }
   };
 
@@ -143,26 +159,31 @@ function Reports() {
     createReport();
   }, [invoices, period, customerFilter, startDate, endDate]);
 
+  const getPeriodKey = (date) => {
+    if (period === "daily") {
+      return date.toLocaleDateString();
+    }
+    if (period === "weekly") {
+      const firstDay = new Date(date.getFullYear(), 0, 1);
+      const days = Math.floor((date - firstDay) / (24 * 60 * 60 * 1000));
+      const weekNumber = Math.ceil((days + firstDay.getDay() + 1) / 7);
+      return `Week ${weekNumber}`;
+    }
+    if (period === "monthly") {
+      return date.toLocaleString("default", { month: "short", year: "numeric" });
+    }
+    if (period === "yearly") {
+      return date.getFullYear().toString();
+    }
+    return "";
+  };
+
   const createReport = () => {
     const data = {};
 
     filteredInvoices.forEach((invoice) => {
       const date = new Date(invoice.createdAt);
-
-      let key = "";
-
-      if (period === "daily") {
-        key = date.toLocaleDateString();
-      } else if (period === "weekly") {
-        const firstDay = new Date(date.getFullYear(), 0, 1);
-        const days = Math.floor((date - firstDay) / (24 * 60 * 60 * 1000));
-        const weekNumber = Math.ceil((days + firstDay.getDay() + 1) / 7);
-        key = `Week ${weekNumber}`;
-      } else if (period === "monthly") {
-        key = date.toLocaleString("default", { month: "short", year: "numeric" });
-      } else if (period === "yearly") {
-        key = date.getFullYear().toString();
-      }
+      const key = getPeriodKey(date);
 
       if (!data[key]) {
         data[key] = { name: key, sales: 0, profit: 0, paid: 0, pending: 0 };
@@ -177,10 +198,54 @@ function Reports() {
     setReportData(Object.values(data));
   };
 
+  useEffect(() => {
+    createProductReport();
+  }, [invoices, period, customerFilter, productFilter, startDate, endDate]);
+
+  const createProductReport = () => {
+    const data = {};
+
+    filteredInvoices.forEach((invoice) => {
+      const date = new Date(invoice.createdAt);
+      const key = getPeriodKey(date);
+
+      (invoice.products || []).forEach((item) => {
+        const itemProductId = item.product?._id || item.product;
+
+        if (productFilter !== "all" && itemProductId !== productFilter) {
+          return;
+        }
+
+        if (!data[key]) {
+          data[key] = { name: key, quantity: 0, revenue: 0, profit: 0 };
+        }
+
+        const quantity = Number(item.quantity || 0);
+        const price = Number(item.price || 0);
+        const purchasePrice = Number(item.purchasePrice || 0);
+
+        data[key].quantity += quantity;
+        data[key].revenue += Number(item.total || price * quantity);
+        data[key].profit += (price - purchasePrice) * quantity;
+      });
+    });
+
+    setProductReportData(Object.values(data));
+  };
+
   const totalSales = reportData.reduce((sum, item) => sum + item.sales, 0);
   const totalProfit = reportData.reduce((sum, item) => sum + item.profit, 0);
   const totalPaid = reportData.reduce((sum, item) => sum + item.paid, 0);
   const totalPending = reportData.reduce((sum, item) => sum + item.pending, 0);
+
+  const totalProductQuantity = productReportData.reduce((sum, item) => sum + item.quantity, 0);
+  const totalProductRevenue = productReportData.reduce((sum, item) => sum + item.revenue, 0);
+  const totalProductProfit = productReportData.reduce((sum, item) => sum + item.profit, 0);
+
+  const selectedProductName =
+    productFilter === "all"
+      ? "All products"
+      : products.find((product) => product._id === productFilter)?.name || "Product";
 
   const presets = [
     { key: "all-time", label: "All time" },
@@ -220,6 +285,19 @@ function Reports() {
             {customers.map((customer) => (
               <option key={customer._id} value={customer._id}>
                 {customer.name}
+              </option>
+            ))}
+          </select>
+
+          <select
+            value={productFilter}
+            onChange={(e) => setProductFilter(e.target.value)}
+            className="filter-select"
+          >
+            <option value="all">All products</option>
+            {products.map((product) => (
+              <option key={product._id} value={product._id}>
+                {product.name}
               </option>
             ))}
           </select>
@@ -368,6 +446,116 @@ function Reports() {
                   <td>Rs. {item.profit.toLocaleString()}</td>
                   <td>Rs. {item.paid.toLocaleString()}</td>
                   <td>Rs. {item.pending.toLocaleString()}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+
+      <div className="page-header" style={{ marginTop: "28px" }}>
+        <p className="page-label">PRODUCT ANALYTICS</p>
+        <h1>Product Report</h1>
+        <p className="page-subtitle">
+          Showing {selectedProductName} &middot; breakdown by {period} period.
+        </p>
+      </div>
+
+      <section className="stats-grid" style={{ gridTemplateColumns: "repeat(3, minmax(0, 1fr))" }}>
+        <div className="stat-card">
+          <div className="stat-card-header">
+            <div className="stat-icon teal-icon">📦</div>
+            <span className="stat-label">QUANTITY SOLD</span>
+          </div>
+          <h2>{totalProductQuantity.toLocaleString()}</h2>
+          <p>Units sold in range</p>
+        </div>
+
+        <div className="stat-card money-card">
+          <div className="stat-card-header">
+            <div className="stat-icon green-icon">💰</div>
+            <span className="stat-label">REVENUE</span>
+          </div>
+          <h2 className="money-value">Rs. {totalProductRevenue.toLocaleString()}</h2>
+          <p>Total revenue from this selection</p>
+        </div>
+
+        <div className="stat-card money-card">
+          <div className="stat-card-header">
+            <div className="stat-icon green-icon">↗</div>
+            <span className="stat-label">PROFIT</span>
+          </div>
+          <h2 className="money-value">Rs. {totalProductProfit.toLocaleString()}</h2>
+          <p>Total profit from this selection</p>
+        </div>
+      </section>
+
+      <div className="dashboard-panel" style={{ marginTop: "20px" }}>
+        <div className="panel-header">
+          <div>
+            <h2>Product Sales Trend</h2>
+            <p>{selectedProductName} &middot; breakdown by {period} period</p>
+          </div>
+          <span className="panel-icon">📦</span>
+        </div>
+
+        <div style={{ width: "100%", height: "380px", marginTop: "10px" }}>
+          {productReportData.length === 0 ? (
+            <div className="empty-state">
+              <div className="empty-icon">📦</div>
+              <strong>No data for this selection</strong>
+              <p>Try a different product, filter or date range.</p>
+            </div>
+          ) : (
+            <ResponsiveContainer>
+              <BarChart data={productReportData}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis dataKey="name" />
+                <YAxis />
+                <Tooltip
+                  formatter={(value, name) =>
+                    name === "Quantity" ? value : `Rs. ${Number(value).toLocaleString()}`
+                  }
+                />
+                <Legend />
+                <Bar dataKey="quantity" name="Quantity" radius={[6, 6, 0, 0]} />
+                <Bar dataKey="revenue" name="Revenue" radius={[6, 6, 0, 0]} />
+                <Bar dataKey="profit" name="Profit" radius={[6, 6, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          )}
+        </div>
+      </div>
+
+      <div className="table-panel" style={{ marginTop: "20px" }}>
+        <h2 style={{ margin: "0 0 16px", fontSize: "15px", fontWeight: 750, color: "var(--color-ink)" }}>
+          Product Report Details
+        </h2>
+
+        {productReportData.length === 0 ? (
+          <div className="empty-state">
+            <div className="empty-icon">📦</div>
+            <strong>No product data available</strong>
+            <p>Adjust the filters above to see product report data.</p>
+          </div>
+        ) : (
+          <table className="data-table">
+            <thead>
+              <tr>
+                <th>Period</th>
+                <th>Quantity</th>
+                <th>Revenue</th>
+                <th>Profit</th>
+              </tr>
+            </thead>
+
+            <tbody>
+              {productReportData.map((item, index) => (
+                <tr key={index}>
+                  <td className="cell-strong">{item.name}</td>
+                  <td>{item.quantity.toLocaleString()}</td>
+                  <td>Rs. {item.revenue.toLocaleString()}</td>
+                  <td>Rs. {item.profit.toLocaleString()}</td>
                 </tr>
               ))}
             </tbody>
