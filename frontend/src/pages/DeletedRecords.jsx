@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import axios from "axios";
+import { API_URL } from "../config";
 
 function DeletedRecords() {
   const [records, setRecords] = useState([]);
@@ -28,7 +29,7 @@ function DeletedRecords() {
       setError("");
 
       const response = await axios.get(
-        "http://localhost:5000/api/admin/deleted-records",
+        `${API_URL}/api/admin/deleted-records`,
         { headers: { Authorization: `Bearer ${token}` } }
       );
 
@@ -57,7 +58,7 @@ function DeletedRecords() {
 
     try {
       await axios.delete(
-        `http://localhost:5000/api/admin/deleted-records/${id}`,
+        `${API_URL}/api/admin/deleted-records/${id}`,
         { headers: { Authorization: `Bearer ${token}` } }
       );
 
@@ -71,11 +72,6 @@ function DeletedRecords() {
       alert(error.response?.data?.message || "Failed to permanently delete record");
     }
   };
-
-  // =====================================================
-  // ACCESS DENIED — page itself is admin-only now,
-  // not just the sidebar link
-  // =====================================================
 
   if (!isAdmin) {
     return (
@@ -239,7 +235,7 @@ function DeletedRecords() {
               <div className="card-actions">
                 <button
                   type="button"
-                  className="btn-icon danger"
+                  className="btn-icon"
                   onClick={() => permanentlyDelete(record._id)}
                 >
                   Permanently delete
