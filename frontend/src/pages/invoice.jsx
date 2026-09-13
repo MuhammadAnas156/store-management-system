@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import axios from "axios";
+import { API_URL } from "../config";
 
 function Invoice() {
   const [customers, setCustomers] = useState([]);
@@ -23,7 +24,7 @@ function Invoice() {
 
   const fetchCustomers = async () => {
     try {
-      const response = await axios.get("http://localhost:5000/api/customers", {
+      const response = await axios.get(`${API_URL}/api/customers`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       setCustomers(response.data);
@@ -34,7 +35,7 @@ function Invoice() {
 
   const fetchProducts = async () => {
     try {
-      const response = await axios.get("http://localhost:5000/api/products", {
+      const response = await axios.get(`${API_URL}/api/products`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       setProducts(response.data);
@@ -109,7 +110,7 @@ function Invoice() {
 
     try {
       const response = await axios.post(
-        "http://localhost:5000/api/invoices",
+        `${API_URL}/api/invoices`,
         {
           customer,
           products: invoiceProducts.map((item) => ({

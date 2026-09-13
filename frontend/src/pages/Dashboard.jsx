@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import axios from "axios";
+import { API_URL } from "../config";
 
 import {
   PieChart,
@@ -54,9 +55,9 @@ function Dashboard() {
 
       const [productsResponse, customersResponse, invoicesResponse] =
         await Promise.all([
-          axios.get("http://localhost:5000/api/products", { headers }),
-          axios.get("http://localhost:5000/api/customers", { headers }),
-          axios.get("http://localhost:5000/api/invoices", { headers }),
+          axios.get(`${API_URL}/api/products`, { headers }),
+          axios.get(`${API_URL}/api/customers`, { headers }),
+          axios.get(`${API_URL}/api/invoices`, { headers }),
         ]);
 
       setProducts(productsResponse.data);

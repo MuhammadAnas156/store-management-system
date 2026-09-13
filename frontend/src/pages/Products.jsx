@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import axios from "axios";
+import { API_URL } from "../config";
 
 function Products() {
   const [products, setProducts] = useState([]);
@@ -33,7 +34,7 @@ function Products() {
 
   const fetchProducts = async () => {
     try {
-      const response = await axios.get("http://localhost:5000/api/products");
+      const response = await axios.get(`${API_URL}/api/products`);
       setProducts(response.data);
     } catch (error) {
       console.log("Products error:", error);
@@ -111,13 +112,13 @@ function Products() {
 
       if (editingId) {
         await axios.put(
-          `http://localhost:5000/api/products/${editingId}`,
+          `${API_URL}/api/products/${editingId}`,
           productData,
           { headers: { Authorization: `Bearer ${token}` } }
         );
         alert("Product updated successfully!");
       } else {
-        await axios.post("http://localhost:5000/api/products", productData, {
+        await axios.post(`${API_URL}/api/products`, productData, {
           headers: { Authorization: `Bearer ${token}` },
         });
         alert("Product added successfully!");
@@ -158,7 +159,7 @@ function Products() {
 
     try {
       const token = localStorage.getItem("token");
-      await axios.delete(`http://localhost:5000/api/products/${id}`, {
+      await axios.delete(`${API_URL}/api/products/${id}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       alert("Product deleted successfully!");

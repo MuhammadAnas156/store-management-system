@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import axios from "axios";
+import { API_URL } from "../config";
 
 function Customer() {
   const [customers, setCustomers] = useState([]);
@@ -11,18 +12,12 @@ function Customer() {
     address: "",
   });
 
+  const [editingId, setEditingId] = useState(null);
   const [searchText, setSearchText] = useState("");
 
-  const [purchaseHistory, setPurchaseHistory] = useState([]);
-  const [selectedCustomer, setSelectedCustomer] = useState(null);
-
-  const [customerSummary, setCustomerSummary] = useState({
-    totalPurchases: 0,
-    totalPaid: 0,
-    totalPending: 0,
-  });
-
-  const [editingId, setEditingId] = useState(null);
+  const [expandedId, setExpandedId] = useState(null);
+  const [purchases, setPurchases] = useState([]);
+  const [loadingPurchases, setLoadingPurchases] = useState(false);
 
   const token = localStorage.getItem("token");
 
@@ -42,12 +37,12 @@ function Customer() {
 
   const fetchCustomers = async () => {
     try {
-      const response = await axios.get("http://localhost:5000/api/customers", {
+      const response = await axios.get(`${API_URL}/api/customers`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       setCustomers(response.data);
     } catch (error) {
-      console.log("Failed to fetch customers:", error);
+      console.log("Customers error:", error);
     }
   };
 
@@ -59,20 +54,49 @@ function Customer() {
     setForm({ ...form, [e.target.name]: e.target.value });
   };
 
+  const resetForm = () => {
+    setForm({ name: "", phone: "", email: "", address: "" });
+    setEditingId(null);
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
 
-    try {
-      await axios.post("http://localhost:5000/api/customers", form, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+    if (editingId && !isAdmin) {
+      alert("Only Admin can edit customers.");
+      return;
+    }
 
-      alert("Customer added successfully!");
-      setForm({ name: "", phone: "", email: "", address: "" });
+    if (!form.name || !form.phone) {
+      alert("Name and phone are required.");
+      return;
+    }
+
+    try {
+      const customerData = {
+        name: form.name.trim(),
+        phone: form.phone.trim(),
+        email: form.email.trim(),
+        address: form.address.trim(),
+      };
+
+      if (editingId) {
+        await axios.put(`${API_URL}/api/customers/${editingId}`, customerData, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        alert("Customer updated successfully!");
+      } else {
+        await axios.post(`${API_URL}/api/customers`, customerData, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        alert("Customer added successfully!");
+      }
+
+      resetForm();
       fetchCustomers();
     } catch (error) {
-      console.log("Failed to add customer:", error);
-      alert(error.response?.data?.message || "Failed to add customer");
+      console.log("Customer save error:", error);
+      alert(error.response?.data?.message || "Failed to save customer");
     }
   };
 
@@ -84,8 +108,8 @@ function Customer() {
 
     setEditingId(customer._id);
     setForm({
-      name: customer.name || "",
-      phone: customer.phone || "",
+      name: customer.name,
+      phone: customer.phone,
       email: customer.email || "",
       address: customer.address || "",
     });
@@ -93,105 +117,54 @@ function Customer() {
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
-  const handleUpdate = async (e) => {
-    e.preventDefault();
-
-    if (!isAdmin) {
-      alert("Only Admin can edit customers.");
-      return;
-    }
-
-    try {
-      await axios.put(
-        `http://localhost:5000/api/customers/${editingId}`,
-        form,
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
-
-      alert("Customer updated successfully!");
-      setForm({ name: "", phone: "", email: "", address: "" });
-      setEditingId(null);
-      fetchCustomers();
-    } catch (error) {
-      console.log("Failed to update customer:", error);
-      alert(error.response?.data?.message || "Failed to update customer");
-    }
-  };
-
-  const cancelEdit = () => {
-    setEditingId(null);
-    setForm({ name: "", phone: "", email: "", address: "" });
-  };
-
-  const deleteCustomer = async (customerId) => {
+  const handleDelete = async (id) => {
     const confirmDelete = window.confirm(
       "Are you sure you want to delete this customer?"
     );
     if (!confirmDelete) return;
 
     try {
-      await axios.delete(`http://localhost:5000/api/customers/${customerId}`, {
+      await axios.delete(`${API_URL}/api/customers/${id}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
-
       alert("Customer deleted successfully!");
 
-      setCustomers((prevCustomers) =>
-        prevCustomers.filter((customer) => customer._id !== customerId)
-      );
+      if (editingId === id) resetForm();
+      if (expandedId === id) setExpandedId(null);
 
-      if (selectedCustomer?._id === customerId) {
-        closePurchaseHistory();
-      }
+      fetchCustomers();
     } catch (error) {
-      console.log("Failed to delete customer:", error);
+      console.log("Delete customer error:", error);
       alert(error.response?.data?.message || "Failed to delete customer");
     }
   };
 
-  const viewPurchaseHistory = async (customer) => {
+  const togglePurchases = async (customerId) => {
+    if (expandedId === customerId) {
+      setExpandedId(null);
+      setPurchases([]);
+      return;
+    }
+
+    setExpandedId(customerId);
+    setLoadingPurchases(true);
+
     try {
       const response = await axios.get(
-        `http://localhost:5000/api/customers/${customer._id}/purchases`,
+        `${API_URL}/api/customers/${customerId}/purchases`,
         { headers: { Authorization: `Bearer ${token}` } }
       );
-
-      const invoices = response.data;
-
-      setPurchaseHistory(invoices);
-      setSelectedCustomer(customer);
-
-      const totalPurchases = invoices.reduce(
-        (total, invoice) => total + Number(invoice.grandTotal || 0),
-        0
-      );
-
-      const totalPaid = invoices.reduce(
-        (total, invoice) => total + Number(invoice.paidAmount || 0),
-        0
-      );
-
-      const totalPending = invoices.reduce(
-        (total, invoice) => total + Number(invoice.pendingAmount || 0),
-        0
-      );
-
-      setCustomerSummary({ totalPurchases, totalPaid, totalPending });
+      setPurchases(response.data);
     } catch (error) {
-      console.log("Failed to fetch purchase history:", error);
-      alert(error.response?.data?.message || "Failed to fetch purchase history");
+      console.log("Purchases fetch error:", error);
+      setPurchases([]);
+    } finally {
+      setLoadingPurchases(false);
     }
-  };
-
-  const closePurchaseHistory = () => {
-    setSelectedCustomer(null);
-    setPurchaseHistory([]);
-    setCustomerSummary({ totalPurchases: 0, totalPaid: 0, totalPending: 0 });
   };
 
   const filteredCustomers = customers.filter((customer) => {
     const search = searchText.toLowerCase();
-
     return (
       customer.name?.toLowerCase().includes(search) ||
       customer.phone?.toLowerCase().includes(search) ||
@@ -202,27 +175,24 @@ function Customer() {
   return (
     <>
       <div className="page-header">
-        <p className="page-label">CUSTOMERS</p>
+        <p className="page-label">CONTACTS</p>
         <h1>Customers</h1>
         <p className="page-subtitle">
-          Manage customers and view their purchase history.
+          Manage customer details and view purchase history.
         </p>
       </div>
 
       <div className="form-panel">
         <h2>{editingId ? "Edit Customer" : "Add Customer"}</h2>
 
-        <form
-          onSubmit={editingId ? handleUpdate : handleSubmit}
-          className="product-form"
-        >
+        <form onSubmit={handleSubmit} className="product-form">
           <div className="form-group">
-            <label htmlFor="name">Customer name</label>
+            <label htmlFor="name">Full name</label>
             <input
               id="name"
               type="text"
               name="name"
-              placeholder="e.g. Ali Raza"
+              placeholder="e.g. Ali Khan"
               value={form.name}
               onChange={handleChange}
               required
@@ -230,12 +200,12 @@ function Customer() {
           </div>
 
           <div className="form-group">
-            <label htmlFor="phone">Phone number</label>
+            <label htmlFor="phone">Phone</label>
             <input
               id="phone"
               type="text"
               name="phone"
-              placeholder="03xx-xxxxxxx"
+              placeholder="e.g. 03001234567"
               value={form.phone}
               onChange={handleChange}
               required
@@ -248,7 +218,7 @@ function Customer() {
               id="email"
               type="email"
               name="email"
-              placeholder="name@example.com"
+              placeholder="e.g. ali@example.com"
               value={form.email}
               onChange={handleChange}
             />
@@ -260,7 +230,7 @@ function Customer() {
               id="address"
               type="text"
               name="address"
-              placeholder="Street, city"
+              placeholder="e.g. Model Town, Lahore"
               value={form.address}
               onChange={handleChange}
             />
@@ -272,8 +242,8 @@ function Customer() {
             </button>
 
             {editingId && (
-              <button type="button" onClick={cancelEdit} className="btn-secondary">
-                Cancel
+              <button type="button" onClick={resetForm} className="btn-secondary">
+                Cancel edit
               </button>
             )}
           </div>
@@ -307,162 +277,84 @@ function Customer() {
           </div>
         </div>
       ) : (
-        <div className="customer-grid">
-          {filteredCustomers.map((customer) => (
-            <div key={customer._id} className="customer-card">
-              <h3>{customer.name}</h3>
+        <div className="table-panel">
+          <table className="data-table">
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>Phone</th>
+                <th>Email</th>
+                <th>Address</th>
+                <th>Action</th>
+              </tr>
+            </thead>
 
-              <p className="customer-meta">
-                <strong>Phone:</strong> {customer.phone}
-              </p>
+            <tbody>
+              {filteredCustomers.map((customer) => (
+                <>
+                  <tr key={customer._id}>
+                    <td className="cell-strong">{customer.name}</td>
+                    <td>{customer.phone}</td>
+                    <td>{customer.email || "-"}</td>
+                    <td>{customer.address || "-"}</td>
+                    <td>
+                      <div className="table-actions">
+                        <button
+                          type="button"
+                          className="btn-icon"
+                          onClick={() => togglePurchases(customer._id)}
+                        >
+                          {expandedId === customer._id ? "Hide" : "Purchases"}
+                        </button>
 
-              <p className="customer-meta">
-                <strong>Email:</strong> {customer.email || "No email"}
-              </p>
+                        {isAdmin && (
+                          <button
+                            type="button"
+                            className="btn-icon"
+                            onClick={() => handleEdit(customer)}
+                          >
+                            Edit
+                          </button>
+                        )}
 
-              <p className="customer-meta">
-                <strong>Address:</strong> {customer.address || "No address"}
-              </p>
+                        <button
+                          type="button"
+                          className="btn-icon danger"
+                          onClick={() => handleDelete(customer._id)}
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
 
-              <div className="customer-actions">
-                <button
-                  type="button"
-                  className="btn-icon accent"
-                  onClick={() => viewPurchaseHistory(customer)}
-                >
-                  Purchase history
-                </button>
-
-                {isAdmin && (
-                  <button
-                    type="button"
-                    className="btn-icon"
-                    onClick={() => handleEdit(customer)}
-                  >
-                    Edit
-                  </button>
-                )}
-
-                <button
-                  type="button"
-                  className="btn-icon danger"
-                  onClick={() => deleteCustomer(customer._id)}
-                >
-                  Delete
-                </button>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {selectedCustomer && (
-        <div className="history-panel">
-          <div className="history-header">
-            <div>
-              <h2>Purchase History</h2>
-              <p>
-                <strong>Customer:</strong> {selectedCustomer.name}
-              </p>
-              <p>
-                <strong>Phone:</strong> {selectedCustomer.phone}
-              </p>
-            </div>
-
-            <button type="button" className="btn-secondary" onClick={closePurchaseHistory}>
-              Close
-            </button>
-          </div>
-
-          <div className="history-summary-grid">
-            <div className="mini-stat">
-              <p>Total purchases</p>
-              <h2>Rs. {customerSummary.totalPurchases.toLocaleString()}</h2>
-            </div>
-
-            <div className="mini-stat">
-              <p>Total paid</p>
-              <h2>Rs. {customerSummary.totalPaid.toLocaleString()}</h2>
-            </div>
-
-            <div className="mini-stat">
-              <p>Total pending</p>
-              <h2>Rs. {customerSummary.totalPending.toLocaleString()}</h2>
-            </div>
-          </div>
-
-          <h3>Invoices</h3>
-
-          {purchaseHistory.length === 0 ? (
-            <div className="empty-state">
-              <div className="empty-icon">🧾</div>
-              <strong>No purchases yet</strong>
-              <p>This customer has no invoices so far.</p>
-            </div>
-          ) : (
-            purchaseHistory.map((invoice) => {
-              const grandTotal = Number(invoice.grandTotal || 0);
-              const paidAmount = Number(invoice.paidAmount || 0);
-              const pendingAmount = Number(invoice.pendingAmount || 0);
-
-              let paymentStatus = "Pending";
-              let statusClass = "pending";
-
-              if (pendingAmount === 0 && paidAmount >= grandTotal && grandTotal > 0) {
-                paymentStatus = "Paid";
-                statusClass = "paid";
-              } else if (paidAmount > 0 && pendingAmount > 0) {
-                paymentStatus = "Partial";
-                statusClass = "partial";
-              }
-
-              return (
-                <div key={invoice._id} className="invoice-card">
-                  <div className="invoice-card-header">
-                    <h4>{invoice.invoiceNumber}</h4>
-                    <span className={`status-pill ${statusClass}`}>
-                      {paymentStatus}
-                    </span>
-                  </div>
-
-                  <p className="invoice-date">
-                    {new Date(invoice.createdAt).toLocaleString()}
-                  </p>
-
-                  {invoice.products?.map((item, index) => (
-                    <div key={index} className="product-line-item">
-                      <strong>{item.product?.name || "Product"}</strong>
-                      <span>
-                        Qty: {item.quantity} &middot; Price: Rs. {item.price} &middot;{" "}
-                        Total: Rs. {item.total}
-                      </span>
-                    </div>
-                  ))}
-
-                  <div className="invoice-totals">
-                    <p>
-                      <strong>Subtotal:</strong> Rs. {invoice.subtotal}
-                    </p>
-                    <p>
-                      <strong>Discount:</strong> Rs. {invoice.discount}
-                    </p>
-                    <h3 className="invoice-grand-total">
-                      Grand total: Rs. {grandTotal}
-                    </h3>
-                    <p>
-                      <strong>Paid:</strong> Rs. {paidAmount}
-                    </p>
-                    <p>
-                      <strong>Pending:</strong> Rs. {pendingAmount}
-                    </p>
-                    <p>
-                      <strong>Payment method:</strong> {invoice.paymentMethod}
-                    </p>
-                  </div>
-                </div>
-              );
-            })
-          )}
+                  {expandedId === customer._id && (
+                    <tr className="user-detail-row">
+                      <td colSpan={5}>
+                        {loadingPurchases ? (
+                          <p>Loading purchase history...</p>
+                        ) : purchases.length === 0 ? (
+                          <p>No purchases found for this customer.</p>
+                        ) : (
+                          purchases.map((invoice) => (
+                            <div key={invoice._id} className="product-line-item">
+                              <strong>{invoice.invoiceNumber}</strong>
+                              <span>
+                                Total: Rs. {invoice.grandTotal} &middot; Paid: Rs.{" "}
+                                {invoice.paidAmount} &middot; Pending: Rs.{" "}
+                                {invoice.pendingAmount} &middot;{" "}
+                                {new Date(invoice.createdAt).toLocaleDateString()}
+                              </span>
+                            </div>
+                          ))
+                        )}
+                      </td>
+                    </tr>
+                  )}
+                </>
+              ))}
+            </tbody>
+          </table>
         </div>
       )}
     </>

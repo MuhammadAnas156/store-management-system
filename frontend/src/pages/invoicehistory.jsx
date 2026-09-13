@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import axios from "axios";
+import { API_URL } from "../config";
 
 function InvoiceHistory() {
   const [invoices, setInvoices] = useState([]);
@@ -31,7 +32,7 @@ function InvoiceHistory() {
 
   const fetchInvoices = async () => {
     try {
-      const response = await axios.get("http://localhost:5000/api/invoices", {
+      const response = await axios.get(`${API_URL}/api/invoices`, {
         headers: { Authorization: `Bearer ${token}` },
       });
 
@@ -53,7 +54,7 @@ function InvoiceHistory() {
     if (!confirmDelete) return;
 
     try {
-      await axios.delete(`http://localhost:5000/api/invoices/${invoiceId}`, {
+      await axios.delete(`${API_URL}/api/invoices/${invoiceId}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
 
@@ -102,7 +103,7 @@ function InvoiceHistory() {
 
     try {
       await axios.put(
-        `http://localhost:5000/api/invoices/${editingId}`,
+        `${API_URL}/api/invoices/${editingId}`,
         {
           discount: Number(editForm.discount || 0),
           paidAmount: Number(editForm.paidAmount || 0),

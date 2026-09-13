@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import axios from "axios";
+import { API_URL } from "../config";
 
 function UserManagement() {
   const [form, setForm] = useState({
@@ -31,7 +32,7 @@ function UserManagement() {
 
   const fetchUsers = async () => {
     try {
-      const response = await axios.get("http://localhost:5000/api/admin/users", {
+      const response = await axios.get(`${API_URL}/api/admin/users`, {
         headers: { Authorization: `Bearer ${token}` },
       });
 
@@ -73,7 +74,7 @@ function UserManagement() {
         }
 
         const response = await axios.put(
-          `http://localhost:5000/api/admin/users/${editingId}`,
+          `${API_URL}/api/admin/users/${editingId}`,
           payload,
           { headers: { Authorization: `Bearer ${token}` } }
         );
@@ -81,7 +82,7 @@ function UserManagement() {
         alert(response.data.message);
       } else {
         const response = await axios.post(
-          "http://localhost:5000/api/admin/register",
+          `${API_URL}/api/admin/register`,
           form,
           { headers: { Authorization: `Bearer ${token}` } }
         );
@@ -125,7 +126,7 @@ function UserManagement() {
 
     try {
       const response = await axios.delete(
-        `http://localhost:5000/api/admin/users/${userId}`,
+        `${API_URL}/api/admin/users/${userId}`,
         { headers: { Authorization: `Bearer ${token}` } }
       );
 
